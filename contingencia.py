@@ -12,7 +12,7 @@ st.set_page_config(
 # ── Webhook n8n ──────────────────────────────────────────────────────────────
 # Un solo webhook: recibe el bloque completo. n8n se encarga internamente
 # de actualizar estado en 'procesamiento' y continuar hacia 'registros'.
-WEBHOOK_FLUJO   = "https://operationskashio.app.n8n.cloud/webhook-test/uipath-data"
+WEBHOOK_FLUJO   = "https://operationskashio.app.n8n.cloud/webhook/uipath-data"
 
 WEBHOOK_HEADERS = {"Content-Type": "application/json"}
 
