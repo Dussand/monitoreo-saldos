@@ -25,7 +25,7 @@ USERS = {
 
 # ── Mapeo cuenta por proveedor ───────────────────────────────────────────────
 CUENTA_MAP = {
-    "BCP":    "01233",
+    "BCP":    "0062",
     "BBVA":   "01348",
     "ALFIN":  "0196",
     "GMONEY": "3316",
