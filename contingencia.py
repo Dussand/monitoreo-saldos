@@ -35,7 +35,7 @@ CUENTA_MAP = {
 tz_lima = pytz.timezone("America/Lima")
 
 # ── Session state defaults ───────────────────────────────────────────────────
-for k, v in [("autenticado", False), ("usuario", None), ("tipo_usuario", None)]:
+for k, v in [("autenticado", False), ("usuario", None), ("tipo_usuario", None), ("envio_ok", False)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -61,6 +61,59 @@ def call_webhook(url: str, payload: dict, nombre: str) -> tuple[bool, str]:
         return False, f"{nombre}: Error de conexión."
     except Exception as e:
         return False, f"{nombre}: Error inesperado — {str(e)}"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# MODAL DE CONFIRMACIÓN — se abre antes de enviar al webhook
+# ════════════════════════════════════════════════════════════════════════════
+@st.dialog("Confirmar registro")
+def modal_confirmacion(registro: dict):
+    st.caption("Revisa que todos los datos sean correctos antes de confirmar el envío.")
+
+    # ── Monto destacado ───────────────────────────────────────────────────────
+    st.markdown(
+        f"""
+        <div style="background:#1e3a5f; border:2px solid #2563eb; border-radius:10px;
+                    padding:16px 22px; margin-bottom:14px;">
+            <div style="color:#93c5fd; font-size:0.75rem; font-weight:600; letter-spacing:0.06em;">
+                MONTO A REGISTRAR ({registro['Moneda']})
+            </div>
+            <div style="color:#ffffff; font-size:2.2rem; font-weight:700; margin-top:4px;">
+                {registro['Moneda']} {registro['Monto']:,.2f}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ── Detalle del registro ──────────────────────────────────────────────────
+    st.markdown("**Detalle del registro:**")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"- **ID Registro:** {registro['ID']}")
+        st.markdown(f"- **Proveedor:** {registro['Proveedor']}")
+        st.markdown(f"- **Cuenta:** {registro['Cuenta']}")
+    with col2:
+        st.markdown(f"- **Fecha:** {registro['Fecha']}")
+        st.markdown(f"- **Hora:** {registro['Hora']}")
+        st.markdown(f"- **Tipo:** {registro['tipo_registro']}")
+
+    st.divider()
+
+    col_ok, col_edit = st.columns(2)
+    with col_ok:
+        if st.button("✅ Confirmar y enviar", type="primary", use_container_width=True):
+            with st.spinner("Enviando registro..."):
+                ok, msg = call_webhook(WEBHOOK_FLUJO, registro, "Webhook · Flujo n8n")
+            if ok:
+                st.session_state.envio_ok = True
+                st.rerun()
+            else:
+                st.error(f"❌ {msg}")
+                st.warning("⚠️ No se envió. Reintenta o contacta al administrador.")
+    with col_edit:
+        if st.button("✏️ Corregir", use_container_width=True):
+            st.rerun()
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -206,7 +259,22 @@ def pantalla_formulario():
 
     if monto_raw:
         if monto_float is not None:
-            st.success(f"✅ Monto interpretado: **{moneda} {monto_float:.2f}**")
+            # st.success(f"✅ Monto interpretado: **{moneda} {monto_float:.2f}**")
+            st.markdown(
+                f"""
+                <div style="background:#14532d; border:1px solid #16a34a; border-radius:8px;
+                            padding:12px 18px; margin:8px 0;">
+                    <div style="color:#86efac; font-size:0.75rem; font-weight:600; letter-spacing:0.06em;">
+                        MONTO INTERPRETADO · VERIFICA EL SEPARADOR DE MILES
+                    </div>
+                    <div style="color:#ffffff; font-size:1.8rem; font-weight:700; margin-top:4px;">
+                        {moneda} {monto_float:,.2f}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.caption("⚠️ La coma (,) indica miles, NO es decimal. Confirma que el monto coincide con el portal bancario.")
         else:
             st.error("❌ No se pudo interpretar el monto. Verifica el formato ingresado.")
 
@@ -225,7 +293,13 @@ def pantalla_formulario():
     st.divider()
 
     # ── Botón envío ───────────────────────────────────────────────────────────
-    enviar = st.button("⬆️ Registrar saldo manual", type="primary", use_container_width=True)
+    # enviar = st.button("⬆️ Registrar saldo manual", type="primary", use_container_width=True)
+    if st.session_state.get("envio_ok", False):
+        st.success("✅ Registro enviado correctamente.")
+        st.session_state.envio_ok = False
+
+    st.caption("**Paso 1 de 2** · Al continuar se abrirá un resumen para confirmar antes de enviar.")
+    enviar = st.button("➡️ Revisar y confirmar envío", type="primary", use_container_width=True)
 
     if enviar:
         errores = []
@@ -258,22 +332,25 @@ def pantalla_formulario():
         }
 
         # ── Envío único al webhook — n8n maneja el resto internamente ─────────
-        with st.spinner("Actualizando..."):
-            ok, msg = call_webhook(WEBHOOK_FLUJO, registro, "Webhook · Flujo n8n")
+        # with st.spinner("Actualizando..."):
+        #     ok, msg = call_webhook(WEBHOOK_FLUJO, registro, "Webhook · Flujo n8n")
 
         # ── Resultado ─────────────────────────────────────────────────────────
-        st.subheader("Resultado del envío")
+        # st.subheader("Resultado del envío")
 
-        if ok:
-            st.success(f"✅ Registro actualizado")
-            # with st.expander("Ver payload enviado", expanded=False):
-            #     st.json(registro)
-            # st.info("💡 Para ingresar un nuevo registro, recarga la página.")
-        else:
-            st.error(f"❌ {msg}")
-            st.warning("⚠️ No se envió la información. Reintenta o contacta al administrador.")
-            # with st.expander("Ver payload que se intentó enviar", expanded=True):
-            #     st.json(registro)
+        # if ok:
+        #     st.success(f"✅ Registro actualizado")
+        #     # with st.expander("Ver payload enviado", expanded=False):
+        #     #     st.json(registro)
+        #     # st.info("💡 Para ingresar un nuevo registro, recarga la página.")
+        # else:
+        #     st.error(f"❌ {msg}")
+        #     st.warning("⚠️ No se envió la información. Reintenta o contacta al administrador.")
+        #     # with st.expander("Ver payload que se intentó enviar", expanded=True):
+        #     #     st.json(registro)
+
+        # ── Abrir modal de confirmación (Paso 2) ──────────────────────────────
+        modal_confirmacion(registro)
 
 
 # ════════════════════════════════════════════════════════════════════════════
