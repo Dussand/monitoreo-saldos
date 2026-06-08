@@ -4,3 +4,4 @@ requests
 python-docx
 PyPDF2
 pytz
+supabase
